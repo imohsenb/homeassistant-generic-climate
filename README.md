@@ -33,3 +33,6 @@ climate:
     hot_tolerance: 0
 
 ````
+
+### Notes
+- This component is a fork of the mainline `generic_thermostat`.
