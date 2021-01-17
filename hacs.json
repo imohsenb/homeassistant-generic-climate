@@ -1,6 +1,0 @@
-{
-    "name": "generic_climate",
-    "country": "SE",
-    "domains": ["climate"],
-    "iot_class": ["Local Polling"]
-}
