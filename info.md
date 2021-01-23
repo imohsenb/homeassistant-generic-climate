@@ -34,5 +34,13 @@ climate:
 
 ````
 
+### Gift
+If you would like to have a charming [Climate thermostat card](https://github.com/imohsenb/homeassistant-climate-card), please take a look at my custom card:
+<p align="center">
+<img src="https://github.com/imohsenb/homeassistant-climate-card/raw/images/cooling.gif" alt="Google Home Cooler mode" width="400"/>
+<img src="https://github.com/imohsenb/homeassistant-climate-card/raw/images/heating.gif" alt="Google Home Heater Mode" width="400"/>
+</p>
+
+
 ### Notes
 - This component is a fork of the mainline `generic_thermostat`.
