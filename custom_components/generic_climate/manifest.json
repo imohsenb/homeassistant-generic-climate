@@ -1,6 +1,7 @@
 {
   "domain": "generic_climate",
   "name": "Generic Climate",
+  "version": "1.0.1",
   "documentation": "https://github.com/imohsenb/homeassistant-generic-climate",
   "dependencies": ["sensor", "switch"],
   "codeowners": [
