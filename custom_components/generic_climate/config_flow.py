@@ -7,6 +7,7 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import (
     CONF_NAME,
+    CONF_UNIQUE_ID,
     PRECISION_HALVES,
     PRECISION_TENTHS,
     PRECISION_WHOLE,
@@ -45,6 +46,9 @@ class GenericClimateConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
+            if unique_id := user_input.get(CONF_UNIQUE_ID):
+                await self.async_set_unique_id(unique_id)
+                self._abort_if_unique_id_configured()
             return self.async_create_entry(
                 title=user_input.get(CONF_NAME, DEFAULT_NAME),
                 data=user_input,
@@ -60,6 +64,7 @@ class GenericClimateConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         schema = vol.Schema(
             {
                 vol.Optional(CONF_NAME, default=DEFAULT_NAME): cv.string,
+                vol.Optional(CONF_UNIQUE_ID): cv.string,
                 vol.Required(CONF_HEATER): switch_selector,
                 vol.Required(CONF_SENSOR): sensor_selector,
                 vol.Optional(CONF_COOLER): switch_selector,
@@ -98,6 +103,7 @@ class GenericClimateOptionsFlow(config_entries.OptionsFlow):
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         self._config_entry = config_entry
+        self._pending_options: dict | None = None
 
     async def async_step_init(self, user_input=None):
         """Manage the options."""
@@ -108,6 +114,14 @@ class GenericClimateOptionsFlow(config_entries.OptionsFlow):
                 key: (value if value not in ("", []) else None)
                 for key, value in user_input.items()
             }
+
+            # If unique_id is changed via options, require explicit confirmation.
+            # Note: changing unique_id may create a new entity registry entry.
+            new_unique_id = normalized.get(CONF_UNIQUE_ID)
+            if new_unique_id and new_unique_id != self._config_entry.unique_id:
+                self._pending_options = normalized
+                return await self.async_step_confirm_unique_id()
+
             return self.async_create_entry(title="", data=normalized)
 
         current = {**self._config_entry.data, **self._config_entry.options}
@@ -122,6 +136,7 @@ class GenericClimateOptionsFlow(config_entries.OptionsFlow):
         schema = vol.Schema(
             {
                 vol.Optional(CONF_NAME, default=current.get(CONF_NAME, DEFAULT_NAME)): cv.string,
+                vol.Optional(CONF_UNIQUE_ID, default=current.get(CONF_UNIQUE_ID) or self._config_entry.unique_id): cv.string,
                 vol.Optional(CONF_HEATER, default=current.get(CONF_HEATER)): switch_selector,
                 vol.Optional(CONF_SENSOR, default=current.get(CONF_SENSOR)): sensor_selector,
                 vol.Optional(CONF_COOLER, default=current.get(CONF_COOLER)): switch_selector,
@@ -154,3 +169,38 @@ class GenericClimateOptionsFlow(config_entries.OptionsFlow):
         )
 
         return self.async_show_form(step_id="init", data_schema=schema)
+
+    async def async_step_confirm_unique_id(self, user_input=None):
+        """Confirm changing unique_id."""
+        if self._pending_options is None:
+            return await self.async_step_init()
+
+        if user_input is not None:
+            if user_input.get("confirm") is True:
+                new_unique_id = self._pending_options.get(CONF_UNIQUE_ID)
+                if new_unique_id and new_unique_id != self._config_entry.unique_id:
+                    self.hass.config_entries.async_update_entry(
+                        self._config_entry,
+                        unique_id=new_unique_id,
+                    )
+
+                options = self._pending_options
+                self._pending_options = None
+                return self.async_create_entry(title="", data=options)
+
+            # Not confirmed; go back to the options form.
+            self._pending_options = None
+            return await self.async_step_init()
+
+        current_unique_id = self._config_entry.unique_id
+        new_unique_id = self._pending_options.get(CONF_UNIQUE_ID)
+        schema = vol.Schema({vol.Required("confirm", default=False): cv.boolean})
+
+        return self.async_show_form(
+            step_id="confirm_unique_id",
+            data_schema=schema,
+            description_placeholders={
+                "current_unique_id": str(current_unique_id or ""),
+                "new_unique_id": str(new_unique_id or ""),
+            },
+        )

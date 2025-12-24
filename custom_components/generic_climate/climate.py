@@ -16,6 +16,7 @@ from homeassistant.const import (
     ATTR_ENTITY_ID,
     ATTR_TEMPERATURE,
     CONF_NAME,
+    CONF_UNIQUE_ID,
     EVENT_HOMEASSISTANT_START,
     PRECISION_HALVES,
     PRECISION_TENTHS,
@@ -59,11 +60,13 @@ SUPPORT_FLAGS = ClimateEntityFeature.TARGET_TEMPERATURE
 
 CONF_COOLER = "cooler"
 CONF_HUMIDITY_SENSOR = "humidity_sensor"
+CONF_ENTITY_UNIQUE_ID = CONF_UNIQUE_ID
 
 PLATFORM_SCHEMA = cv.PLATFORM_SCHEMA.extend(
     {
         vol.Required(CONF_HEATER): cv.entity_id,
         vol.Required(CONF_SENSOR): cv.entity_id,
+        vol.Optional(CONF_ENTITY_UNIQUE_ID): cv.string,
         vol.Optional(CONF_MAX_TEMP): vol.Coerce(float),
         vol.Optional(CONF_MIN_DUR): cv.positive_time_period,
         vol.Optional(CONF_MIN_TEMP): vol.Coerce(float),
@@ -93,6 +96,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
         [
             GenericClimate(
                 name=data.get(CONF_NAME, DEFAULT_NAME),
+                unique_id=data.get(CONF_ENTITY_UNIQUE_ID),
                 heater_entity_id=data.get(CONF_HEATER),
                 sensor_entity_id=data.get(CONF_SENSOR),
                 min_temp=data.get(CONF_MIN_TEMP),
@@ -119,6 +123,7 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     await async_setup_reload_service(hass, DOMAIN, PLATFORMS)
 
     name = config.get(CONF_NAME)
+    unique_id = config.get(CONF_ENTITY_UNIQUE_ID)
     heater_entity_id = config.get(CONF_HEATER)
     sensor_entity_id = config.get(CONF_SENSOR)
     min_temp = config.get(CONF_MIN_TEMP)
@@ -140,6 +145,7 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
         [
             GenericClimate(
                 name=name,
+                unique_id=unique_id,
                 heater_entity_id=heater_entity_id,
                 sensor_entity_id=sensor_entity_id,
                 min_temp=min_temp,
@@ -166,6 +172,7 @@ class GenericClimate(ClimateEntity, RestoreEntity):
     def __init__(
         self,
         name,
+        unique_id,
         heater_entity_id,
         sensor_entity_id,
         min_temp,
@@ -184,6 +191,7 @@ class GenericClimate(ClimateEntity, RestoreEntity):
     ):
         """Initialize the thermostat."""
         self._name = name
+        self._attr_unique_id = unique_id
         self.heater_entity_id = heater_entity_id
         self.sensor_entity_id = sensor_entity_id
         self.min_cycle_duration = min_cycle_duration

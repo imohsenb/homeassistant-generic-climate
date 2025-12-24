@@ -30,6 +30,7 @@ Legacy YAML configuration is still supported:
 climate:
   - platform: generic_climate
     name: Living Room Climate
+    unique_id: living_room_generic_climate
     heater: switch.livingroom_heater
     cooler: switch.livingroom_cooler
     target_sensor: sensor.livingroom_temperature
