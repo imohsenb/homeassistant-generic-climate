@@ -22,6 +22,10 @@ Restart Home Assistant.
 
 ### Configuration.yaml
 
+This integration now supports UI configuration (Settings → Devices & services → Add integration → "Generic Climate").
+
+Legacy YAML configuration is still supported:
+
 ````
 climate:
   - platform: generic_climate

@@ -1,25 +1,17 @@
 """Adds support for generic climate units."""
+
 import asyncio
 import logging
 
 import voluptuous as vol
 
-from homeassistant.components.climate import PLATFORM_SCHEMA, ClimateEntity
-from homeassistant.components.climate.const import (
-    ATTR_PRESET_MODE,
-    CURRENT_HVAC_COOL,
-    CURRENT_HVAC_HEAT,
-    CURRENT_HVAC_IDLE,
-    CURRENT_HVAC_OFF,
-    HVAC_MODE_COOL,
-    HVAC_MODE_HEAT,
-    HVAC_MODE_OFF,
-    PRESET_AWAY,
-    PRESET_NONE,
-    SUPPORT_PRESET_MODE,
-    SUPPORT_TARGET_TEMPERATURE,
-    SUPPORT_TARGET_HUMIDITY,
+from homeassistant.components.climate import (
+    ClimateEntity,
+    ClimateEntityFeature,
+    HVACAction,
+    HVACMode,
 )
+from homeassistant.components.climate.const import ATTR_PRESET_MODE, PRESET_AWAY, PRESET_NONE
 from homeassistant.const import (
     ATTR_ENTITY_ID,
     ATTR_TEMPERATURE,
@@ -63,14 +55,12 @@ CONF_KEEP_ALIVE = "keep_alive"
 CONF_INITIAL_HVAC_MODE = "initial_hvac_mode"
 CONF_AWAY_TEMP = "away_temp"
 CONF_PRECISION = "precision"
-SUPPORT_FLAGS = SUPPORT_TARGET_TEMPERATURE
+SUPPORT_FLAGS = ClimateEntityFeature.TARGET_TEMPERATURE
 
 CONF_COOLER = "cooler"
 CONF_HUMIDITY_SENSOR = "humidity_sensor"
 
-ATTR_HUMIDITY = "humidity"
-
-PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
+PLATFORM_SCHEMA = cv.PLATFORM_SCHEMA.extend(
     {
         vol.Required(CONF_HEATER): cv.entity_id,
         vol.Required(CONF_SENSOR): cv.entity_id,
@@ -83,7 +73,7 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
         vol.Optional(CONF_TARGET_TEMP): vol.Coerce(float),
         vol.Optional(CONF_KEEP_ALIVE): cv.positive_time_period,
         vol.Optional(CONF_INITIAL_HVAC_MODE): vol.In(
-            [HVAC_MODE_COOL, HVAC_MODE_HEAT, HVAC_MODE_OFF]
+            [HVACMode.COOL, HVACMode.HEAT, HVACMode.OFF]
         ),
         vol.Optional(CONF_AWAY_TEMP): vol.Coerce(float),
         vol.Optional(CONF_PRECISION): vol.In(
@@ -93,6 +83,34 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
         vol.Optional(CONF_HUMIDITY_SENSOR): cv.entity_id,
     }
 )
+
+
+async def async_setup_entry(hass, config_entry, async_add_entities):
+    """Set up the Generic Climate platform from a config entry."""
+    data = {**config_entry.data, **config_entry.options}
+
+    async_add_entities(
+        [
+            GenericClimate(
+                name=data.get(CONF_NAME, DEFAULT_NAME),
+                heater_entity_id=data.get(CONF_HEATER),
+                sensor_entity_id=data.get(CONF_SENSOR),
+                min_temp=data.get(CONF_MIN_TEMP),
+                max_temp=data.get(CONF_MAX_TEMP),
+                target_temp=data.get(CONF_TARGET_TEMP),
+                min_cycle_duration=data.get(CONF_MIN_DUR),
+                cold_tolerance=data.get(CONF_COLD_TOLERANCE, DEFAULT_TOLERANCE),
+                hot_tolerance=data.get(CONF_HOT_TOLERANCE, DEFAULT_TOLERANCE),
+                keep_alive=data.get(CONF_KEEP_ALIVE),
+                initial_hvac_mode=data.get(CONF_INITIAL_HVAC_MODE),
+                away_temp=data.get(CONF_AWAY_TEMP),
+                precision=data.get(CONF_PRECISION),
+                unit=hass.config.units.temperature_unit,
+                cooler_entity_id=data.get(CONF_COOLER),
+                humidity_entity_id=data.get(CONF_HUMIDITY_SENSOR),
+            )
+        ]
+    )
 
 
 async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
@@ -121,22 +139,22 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     async_add_entities(
         [
             GenericClimate(
-                name,
-                heater_entity_id,
-                sensor_entity_id,
-                min_temp,
-                max_temp,
-                target_temp,
-                min_cycle_duration,
-                cold_tolerance,
-                hot_tolerance,
-                keep_alive,
-                initial_hvac_mode,
-                away_temp,
-                precision,
-                unit,
-                cooler_entity_id,
-                humidity_entity_id
+                name=name,
+                heater_entity_id=heater_entity_id,
+                sensor_entity_id=sensor_entity_id,
+                min_temp=min_temp,
+                max_temp=max_temp,
+                target_temp=target_temp,
+                min_cycle_duration=min_cycle_duration,
+                cold_tolerance=cold_tolerance,
+                hot_tolerance=hot_tolerance,
+                keep_alive=keep_alive,
+                initial_hvac_mode=initial_hvac_mode,
+                away_temp=away_temp,
+                precision=precision,
+                unit=unit,
+                cooler_entity_id=cooler_entity_id,
+                humidity_entity_id=humidity_entity_id,
             )
         ]
     )
@@ -172,16 +190,16 @@ class GenericClimate(ClimateEntity, RestoreEntity):
         self._cold_tolerance = cold_tolerance
         self._hot_tolerance = hot_tolerance
         self._keep_alive = keep_alive
-        self._hvac_mode = initial_hvac_mode
+        self._hvac_mode = HVACMode(initial_hvac_mode) if initial_hvac_mode else None
         self._saved_target_temp = target_temp or away_temp
         self._temp_precision = precision
         self._cooler_entity_id = cooler_entity_id
         self.humidity_entity_id = humidity_entity_id
-        self._hvac_list = [HVAC_MODE_OFF]
+        self._hvac_list = [HVACMode.OFF]
         if self._cooler_entity_id:
-            self._hvac_list.append(HVAC_MODE_COOL)
+            self._hvac_list.append(HVACMode.COOL)
         if self.heater_entity_id:
-            self._hvac_list.append(HVAC_MODE_HEAT)
+            self._hvac_list.append(HVACMode.HEAT)
         self._active = False
         self._cur_temp = None
         self._cur_hum = None
@@ -192,9 +210,7 @@ class GenericClimate(ClimateEntity, RestoreEntity):
         self._unit = unit
         self._support_flags = SUPPORT_FLAGS
         if away_temp:
-            self._support_flags = self._support_flags | SUPPORT_PRESET_MODE
-        if humidity_entity_id:
-            self._support_flags = self._support_flags | SUPPORT_TARGET_HUMIDITY
+            self._support_flags |= ClimateEntityFeature.PRESET_MODE
         self._away_temp = away_temp
         self._is_away = False
 
@@ -262,7 +278,10 @@ class GenericClimate(ClimateEntity, RestoreEntity):
             if old_state.attributes.get(ATTR_PRESET_MODE) == PRESET_AWAY:
                 self._is_away = True
             if not self._hvac_mode and old_state.state:
-                self._hvac_mode = old_state.state
+                try:
+                    self._hvac_mode = HVACMode(old_state.state)
+                except ValueError:
+                    self._hvac_mode = HVACMode.OFF
 
         else:
             # No previous state, try and restore defaults
@@ -274,7 +293,7 @@ class GenericClimate(ClimateEntity, RestoreEntity):
 
         # Set default state to off
         if not self._hvac_mode:
-            self._hvac_mode = HVAC_MODE_OFF
+            self._hvac_mode = HVACMode.OFF
 
     @property
     def should_poll(self):
@@ -296,6 +315,11 @@ class GenericClimate(ClimateEntity, RestoreEntity):
     @property
     def temperature_unit(self):
         """Return the unit of measurement."""
+        return self._unit
+
+    @property
+    def native_temperature_unit(self):
+        """Return the unit for the native temperature values."""
         return self._unit
 
     @property
@@ -321,16 +345,14 @@ class GenericClimate(ClimateEntity, RestoreEntity):
     @property
     def hvac_action(self):
         """Return the current running hvac operation if supported.
-
-        Need to be one of CURRENT_HVAC_*.
         """
-        if self._hvac_mode == HVAC_MODE_OFF:
-            return CURRENT_HVAC_OFF
+        if self._hvac_mode == HVACMode.OFF:
+            return HVACAction.OFF
         if not self._is_device_active:
-            return CURRENT_HVAC_IDLE
-        if self._hvac_mode == HVAC_MODE_COOL:
-            return CURRENT_HVAC_COOL
-        return CURRENT_HVAC_HEAT
+            return HVACAction.IDLE
+        if self._hvac_mode == HVACMode.COOL:
+            return HVACAction.COOLING
+        return HVACAction.HEATING
 
     @property
     def target_temperature(self):
@@ -350,20 +372,23 @@ class GenericClimate(ClimateEntity, RestoreEntity):
     @property
     def preset_modes(self):
         """Return a list of available preset modes or PRESET_NONE if _away_temp is undefined."""
-        return [PRESET_NONE, PRESET_AWAY] if self._away_temp else PRESET_NONE
+        return [PRESET_NONE, PRESET_AWAY] if self._away_temp else [PRESET_NONE]
 
     async def async_set_hvac_mode(self, hvac_mode):
         """Set hvac mode."""
-        if hvac_mode == HVAC_MODE_HEAT:
-            self._hvac_mode = HVAC_MODE_HEAT
+        hvac_mode = HVACMode(hvac_mode)
+        if hvac_mode == HVACMode.HEAT:
+            self._hvac_mode = HVACMode.HEAT
             await self._async_control_heating(force=True)
-        elif hvac_mode == HVAC_MODE_COOL:
-            self._hvac_mode = HVAC_MODE_COOL
+        elif hvac_mode == HVACMode.COOL:
+            self._hvac_mode = HVACMode.COOL
             await self._async_control_cooling(force=True)
-        elif hvac_mode == HVAC_MODE_OFF:
-            self._hvac_mode = HVAC_MODE_OFF
+        elif hvac_mode == HVACMode.OFF:
+            self._hvac_mode = HVACMode.OFF
             if self._is_device_active:
                 await self._async_heater_turn_off()
+                if self._cooler_entity_id:
+                    await self._async_cooler_turn_off()
         else:
             _LOGGER.error("Unrecognized hvac mode: %s", hvac_mode)
             return
@@ -408,7 +433,7 @@ class GenericClimate(ClimateEntity, RestoreEntity):
         self.async_write_ha_state()
 
     async def _async_control_heating_cooling(self, force = False):
-        if self._hvac_mode == HVAC_MODE_COOL:
+        if self._hvac_mode == HVACMode.COOL:
             await self._async_control_cooling(force= force)
         else:
             await self._async_control_heating(force= force)
@@ -458,7 +483,12 @@ class GenericClimate(ClimateEntity, RestoreEntity):
                     self._target_temp,
                 )
 
-            if not self._active or self._hvac_mode == HVAC_MODE_OFF:
+            if not self._active or self._hvac_mode == HVACMode.OFF:
+                return
+
+            cur_temp = self._cur_temp
+            target_temp = self._target_temp
+            if cur_temp is None or target_temp is None:
                 return
 
             if not force and time is None:
@@ -470,7 +500,7 @@ class GenericClimate(ClimateEntity, RestoreEntity):
                     if self._is_device_active:
                         current_state = STATE_ON
                     else:
-                        current_state = HVAC_MODE_OFF
+                        current_state = HVACMode.OFF
                     long_enough = condition.state(
                         self.hass,
                         self.heater_entity_id,
@@ -480,8 +510,8 @@ class GenericClimate(ClimateEntity, RestoreEntity):
                     if not long_enough:
                         return
 
-            too_cold = self._target_temp >= self._cur_temp + self._cold_tolerance
-            too_hot = self._cur_temp >= self._target_temp + self._hot_tolerance
+            too_cold = target_temp >= cur_temp + self._cold_tolerance
+            too_hot = cur_temp >= target_temp + self._hot_tolerance
             if self._is_device_active:
                 if too_hot:
                     _LOGGER.info("Turning off heater %s",
@@ -517,7 +547,12 @@ class GenericClimate(ClimateEntity, RestoreEntity):
                     self._target_temp,
                 )
 
-            if not self._active or self._hvac_mode == HVAC_MODE_OFF:
+            if not self._active or self._hvac_mode == HVACMode.OFF:
+                return
+
+            cur_temp = self._cur_temp
+            target_temp = self._target_temp
+            if cur_temp is None or target_temp is None:
                 return
 
             if not force and time is None:
@@ -529,7 +564,7 @@ class GenericClimate(ClimateEntity, RestoreEntity):
                     if self._is_device_active:
                         current_state = STATE_ON
                     else:
-                        current_state = HVAC_MODE_OFF
+                        current_state = HVACMode.OFF
                     long_enough = condition.state(
                         self.hass,
                         self._cooler_entity_id,
@@ -539,12 +574,11 @@ class GenericClimate(ClimateEntity, RestoreEntity):
                     if not long_enough:
                         return
 
-            too_cold = self._target_temp >= self._cur_temp + self._cold_tolerance
-            too_hot = self._cur_temp >= self._target_temp + self._hot_tolerance
+            too_cold = target_temp >= cur_temp + self._cold_tolerance
+            too_hot = cur_temp >= target_temp + self._hot_tolerance
             if self._is_device_active:
                 if too_cold:
-                    _LOGGER.info("Turning off cooler %s",
-                                 self.heater_entity_id)
+                    _LOGGER.info("Turning off cooler %s", self._cooler_entity_id)
                     await self._async_cooler_turn_off()
                 elif time is not None:
                     # The time argument is passed only in keep-alive case
